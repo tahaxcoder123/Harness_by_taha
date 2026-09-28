@@ -1,97 +1,186 @@
 # Harness-Eval — Coding Agent Harness Comparison & Evaluation Engine
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Test Suite](https://img.shields.io/badge/tests-28%2F28%20passed-brightgreen.svg)]()
 [![Evaluation Engine](https://img.shields.io/badge/eval-multi--dimensional-emerald.svg)]()
+[![Schema Version](https://img.shields.io/badge/schema-1.0.0-orange.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)]()
 
 > **"Did changing the coding-agent harness make the agent better, worse, or inconclusive?"**
 
-`harness-eval` is an evaluation engine designed to answer this question with empirical, auditable evidence. Rather than judging harness changes by reading a few anecdotal outputs or collapsing evaluation into an unexplained single number, `harness-eval` runs a baseline harness and a candidate harness over identical benchmark tasks, collects multidimensional signals, and renders transparent verdicts (`POSITIVE`, `NEGATIVE`, or `INCONCLUSIVE`).
+`harness-eval` is an empirical evaluation and comparison engine designed specifically for coding-agent harnesses. When engineering teams modify an LLM agent's operational perimeter—updating system prompts, modifying `AGENTS.md` instructions, adding skill libraries, altering tool permissions, or switching underlying foundation models—`harness-eval` provides transparent, auditable evidence and defensive verdicts (`POSITIVE`, `NEGATIVE`, or `INCONCLUSIVE`).
+
+Rather than relying on subjective inspections of a few anecdotal outputs or collapsing multidimensional performance into an uninterpretable composite score, `harness-eval` executes baseline and candidate harness configurations over identical benchmark tasks under controlled, reproducible conditions.
+
+---
 
 > [!NOTE]
-> **Detailed Technical Documentation**: For the complete architectural specification, multi-dimensional methodology, decision engine rules matrix, and client-facing technical breakdown, see [`docs/Project_Documentation.md`](file:///d:/Task/chat/docs/Project_Documentation.md).
+> **Complete Technical Specification**: For the exhaustive 24-section architecture reference, mathematical scoring formulas, decision engine rules matrix, and client-facing breakdown, see [`docs/Project_Documentation.md`](file:///d:/Task/chat/docs/Project_Documentation.md).
 
 ---
 
-## 1. Core Concepts
+## 1. Key Value Propositions
 
-| Concept | Definition |
-| :--- | :--- |
-| **Harness** | The entire system perimeter surrounding the coding agent: model choice, system prompts, `AGENTS.md`, skill libraries, tool permissions, hooks, and temperature. |
-| **Baseline** | The current stable harness configuration in production. |
-| **Candidate** | The proposed or modified harness configuration under test (e.g. adding a new skill, updating prompts, or switching models). |
-| **Benchmark** | A curated collection of engineering tasks with explicit acceptance criteria, target files, unit tests, and holdout tests. |
-| **Evaluation Run** | An isolated execution of a benchmark task under a specific harness, recording execution traces, patch diffs, test logs, tokens, and runtime. |
-| **Holdout Tests** | Private verification tests run during evaluation that the agent was not shown during development, preventing test gaming and overfitting. |
-| **Metrics** | Multi-dimensional measurements: Correctness, Requirement satisfaction, Convention compliance, Cost/tokens, Latency, and Reliability. |
-| **Evidence** | Granular, auditable artifacts: unified diffs, failure tracebacks, criterion check results, and per-task comparisons. |
-| **Decision** | The verdict rendered by a transparent rules engine: `POSITIVE` (unambiguous improvement), `NEGATIVE` (measurable degradation), or `INCONCLUSIVE` (trade-offs or insufficient sample size). |
-| **Inconclusive Result** | A primary first-class outcome returned when accuracy gains are paired with high regressions, extreme cost inflation, or small-sample statistical uncertainty. |
+- **Side-by-Side Controlled Evaluation**: Executes baseline and candidate harnesses against identical benchmark tasks with zero state contamination.
+- **Holdout Test Verification**: Combines visible unit tests with hidden holdout verification suites (`eval_tests/`), penalizing agents that overfit to visible assertions (40% unit / 60% holdout split).
+- **Multi-Dimensional Metrics**: Preserves distinct signals for Correctness, Requirement Satisfaction, Convention Compliance, Financial Cost, Execution Runtime, and Reliability rather than collapsing them into an arbitrary composite score.
+- **Defensive Decision Framework**: Enforces a strict zero-regression policy, cost-inflation thresholds (>60%), and small-sample guardrails ($N < 10$), treating `INCONCLUSIVE` as a first-class, defensible outcome.
+- **Pluggable Runner Architecture**: Ships with an offline, deterministic, MD5-seeded `MockRunner` (zero external API keys required) alongside a subprocess `RealAgentRunner` for live CLI/API integration.
+- **Multi-Iteration Variance Analysis**: Supports repeated trials (`--repetitions`) to measure agent consistency, runtime medians, and cost distributions.
+- **Rich Auditable Artifacts**: Produces ASCII-safe terminal tables, self-contained single-file dark-mode HTML reports, versioned JSON dumps (`SCHEMA_VERSION = "1.0.0"`), and per-task unified git patches (`.patch`).
 
 ---
 
-## 2. Architecture
+## 2. High-Level Architecture
 
-```text
-                  +-----------------------------------+
-                  |      Benchmark Tasks (YAML)       |
-                  +-----------------+-----------------+
-                                    |
-                                    v
-                         +--------------------+
-                         |    Agent Runner    |
-                         | (Mock / Real API)  |
-                         +----+----------+----+
-                              |          |
-               +--------------+          +---------------+
-               v                                         v
-     +-------------------+                     +-------------------+
-     | Baseline Harness  |                     | Candidate Harness |
-     | (config, prompts, |                     | (config, prompts, |
-     |  skills, tools)   |                     |  skills, tools)   |
-     +---------+---------+                     +---------+---------+
-               |                                         |
-               +--------------+          +---------------+
-                              |          |
-                              v          v
-                         +--------------------+
-                         | Multi-Dimensional  |
-                         |  Evaluator Engine  |
-                         +---------+----------+
-                                   |
-           +-----------------------+-----------------------+
-           |                       |                       |
-           v                       v                       v
-     [Correctness]           [Requirements]          [Code Quality]
-     - Unit tests            - Acceptance Criteria   - Type annotations
-     - Holdout tests         - Weighted scoring      - Lint / Formatting
-           |                       |                       |
-           +-----------------------+-----------------------+
-                                   |
-                                   v
-                         +--------------------+
-                         |     Comparator     |
-                         |   (Task Deltas)    |
-                         +---------+----------+
-                                   |
-                                   v
-                         +--------------------+
-                         |  Decision Engine   |
-                         | (Rules & Tradeoffs)|
-                         +---------+----------+
-                                   |
-     +-----------------------------+-----------------------------+
-     |                             |                             |
-     v                             v                             v
-[Terminal Summary]         [Interactive HTML]            [report.json]
-(Rich tables & banner)    (Self-contained report)     (Raw runs/ artifacts)
+```mermaid
+flowchart TD
+    subgraph Inputs ["Input Specifications"]
+        BT["Benchmark Tasks (tasks.yaml)"]
+        BH["Baseline Harness (config.yaml, AGENTS.md, skills)"]
+        CH["Candidate Harness (config.yaml, AGENTS.md, skills)"]
+    end
+
+    subgraph CLI ["CLI Interface (harness-eval)"]
+        CMD_EVAL["evaluate command"]
+        CMD_DIFF["diff command"]
+        CMD_INSPECT["inspect command"]
+    end
+
+    subgraph Runner ["Agent Execution Engine"]
+        AR_FACTORY{"Runner Selection"}
+        MOCK["MockRunner (Deterministic, Seeded)"]
+        REAL["RealAgentRunner (Subprocess / LLM API)"]
+    end
+
+    subgraph EvalEngine ["Multi-Dimensional Evaluator"]
+        CORR["Correctness Engine (Unit 40% / Holdout 60%)"]
+        REQ["Requirement Engine (Weighted Criteria)"]
+        QUAL["Convention Compliance (Lint Checks)"]
+        COST["Cost & Token Aggregator"]
+    end
+
+    subgraph Comparison ["Comparator & Decision Framework"]
+        COMP["Task & Aggregate Comparator (Deltas)"]
+        STAT["Statistical Engine (Variance & N Thresholds)"]
+        DEC["Decision Engine (Rule-based Verdicts)"]
+    end
+
+    subgraph Output ["Report Exporters & Artifacts"]
+        TERM["Rich Terminal Output"]
+        HTML["Interactive report.html"]
+        JSON["Versioned report.json & summary.json"]
+        RUNS["Raw Task Artifacts (runs/task-id/*.patch)"]
+    end
+
+    BT --> CMD_EVAL
+    BH --> CMD_EVAL
+    CH --> CMD_EVAL
+
+    CMD_DIFF --> BH
+    CMD_DIFF --> CH
+
+    CMD_EVAL --> AR_FACTORY
+    AR_FACTORY -->|--runner mock| MOCK
+    AR_FACTORY -->|--runner real| REAL
+
+    MOCK --> EvalEngine
+    REAL --> EvalEngine
+
+    EvalEngine --> CORR & REQ & QUAL & COST
+    CORR & REQ & QUAL & COST --> COMP
+    COMP --> STAT
+    STAT --> DEC
+
+    DEC --> TERM & HTML & JSON & RUNS
+    RUNS --> CMD_INSPECT
 ```
 
 ---
 
-## 3. Installation
+## 3. Repository & Folder Structure
 
-Requires Python 3.10+.
+```text
+harness-eval/
+├── AGENTS.md                     # Agent guidance & critical system invariants
+├── DESIGN.md                     # Architectural rationale & trade-off documentation
+├── README.md                     # Main GitHub repository overview & quick start
+├── pyproject.toml                # Build configuration & dependencies
+│
+├── benchmarks/                   # Benchmark task suites & YAML definitions
+│   ├── README.md                 # Benchmark guide & task specification schema
+│   └── sample/
+│       └── tasks.yaml            # Standard 6-task benchmark suite (task-01 to task-06)
+│
+├── harnesses/                    # Harness configurations under evaluation
+│   ├── README.md                 # Harness architecture, config schema & diffing guide
+│   ├── baseline/                 # Reference baseline harness (Haiku, basic skills)
+│   │   ├── config.yaml
+│   │   ├── AGENTS.md
+│   │   └── skills/
+│   └── candidate/                # Candidate harness (Sonnet, typing, testing, hooks)
+│       ├── config.yaml
+│       ├── AGENTS.md
+│       ├── skills/
+│       └── hooks/
+│
+├── sample_project/               # Target Python application under evaluation
+│   ├── README.md                 # Target service architecture & holdout isolation guide
+│   ├── app/                      # Source code (users.py, orders.py, database.py, auth.py)
+│   ├── tests/                    # Visible unit tests
+│   └── eval_tests/               # Hidden holdout verification tests
+│
+├── src/                          # Core harness-eval Python package
+│   ├── README.md                 # Source architecture & module responsibilities
+│   └── harness_eval/
+│       ├── __init__.py
+│       ├── __main__.py           # python -m harness_eval entrypoint
+│       ├── cli.py                # CLI dispatcher (evaluate, inspect, diff)
+│       ├── config.py             # DecisionPolicy thresholds
+│       ├── models.py             # Versioned Pydantic schemas (SCHEMA_VERSION = "1.0.0")
+│       ├── benchmarks/loader.py  # YAML task loader & filter
+│       ├── harness/              # Config loaders & structural diff engine
+│       ├── runners/              # Abstract, Mock, and Real runners
+│       ├── evaluation/           # Dimensions, comparator, statistics, decision engine
+│       └── reporting/            # Rich terminal, JSON, and standalone HTML exporters
+│
+├── tests/                        # Automated test suite (28 tests)
+│   ├── README.md                 # Test suite guide, coverage matrix & invariants
+│   ├── test_benchmark_loader.py
+│   ├── test_comparator.py
+│   ├── test_decision_logic.py
+│   ├── test_e2e_cli.py
+│   ├── test_evaluation_dimensions.py
+│   ├── test_harness_diff.py
+│   ├── test_harness_loader.py
+│   ├── test_reporting.py
+│   └── test_runners.py
+│
+├── reports/                      # Evaluation output artifacts
+│   ├── README.md                 # Report artifact guide & inspection workflow
+│   └── sample/                   # Generated evaluation run
+│       ├── report.html           # Standalone interactive dark-mode HTML report
+│       ├── report.json           # Full versioned JSON schema dump
+│       ├── summary.json          # Compact CI/CD executive summary
+│       └── runs/                 # Per-task raw diffs, logs & evidence
+│
+├── agent-process/                # Development audit trail & session logs
+│   ├── README.md                 # Engineering phases & process documentation
+│   ├── prompts/                  # Prompt progression (01_architecture, 02_impl, 03_review)
+│   └── transcript/               # Complete build session execution transcript
+│
+└── docs/                         # In-depth technical specifications
+    ├── README.md                 # Documentation index & navigation
+    └── Project_Documentation.md  # Master 24-section technical architecture reference
+```
+
+---
+
+## 4. Installation
+
+### Prerequisites
+- Python 3.10 or higher
+- `pip` package manager
 
 ```bash
 # Clone the repository
@@ -100,20 +189,25 @@ cd harness-eval
 
 # Create and activate virtual environment
 python -m venv .venv
+
 # On Linux/macOS:
 source .venv/bin/activate
-# On Windows:
+
+# On Windows (PowerShell):
 .venv\Scripts\activate
 
-# Install the package in editable mode with development dependencies
+# Install in editable mode with development dependencies
 pip install -e .
 ```
 
 ---
 
-## 4. Quick Start
+## 5. Quick Start & CLI Usage
 
-Run an evaluation comparing the baseline harness against the candidate harness on the sample project benchmark:
+The `harness-eval` tool provides three primary CLI subcommands: `evaluate`, `inspect`, and `diff`.
+
+### 1. Run Benchmark Evaluation (`evaluate`)
+Compare the baseline harness against the candidate harness across all benchmark tasks:
 
 ```bash
 harness-eval evaluate \
@@ -123,13 +217,28 @@ harness-eval evaluate \
   --output reports/sample
 ```
 
-Inspect the raw diffs, logs, and evidence for a specific task:
+#### Key Options
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `--baseline` | `harnesses/baseline` | Directory containing baseline `config.yaml` |
+| `--candidate` | `harnesses/candidate` | Directory containing candidate `config.yaml` |
+| `--tasks` | `benchmarks/sample/tasks.yaml` | Path to benchmark tasks YAML suite |
+| `--output` | `reports/sample` | Destination directory for generated artifacts |
+| `--task` | `None` | Filter evaluation to a single task ID (e.g., `--task task-01`) |
+| `--runner` | `mock` | Execution engine: `mock` (deterministic) or `real` (subprocess) |
+| `--repetitions`| `1` | Repetitions per task for variance estimation |
+| `--seed` | `42` | Random seed for deterministic mock execution |
+| `--format` | `all` | Output format: `all`, `terminal`, `html`, or `json` |
+
+### 2. Inspect Raw Task Evidence (`inspect`)
+Audit task-level patch diffs, test logs, and criterion scores from a completed run:
 
 ```bash
 harness-eval inspect task-01 --output reports/sample
 ```
 
-Show configuration differences between the two harnesses:
+### 3. Compare Harness Configurations (`diff`)
+Inspect configuration differences (models, skills, tools, hooks, prompts) without running tasks:
 
 ```bash
 harness-eval diff \
@@ -139,7 +248,9 @@ harness-eval diff \
 
 ---
 
-## 5. Sample Terminal Output
+## 6. Sample Evaluation Showcase
+
+Running `harness-eval evaluate` on the sample project benchmark produces the following ASCII-safe terminal output:
 
 ```text
 -------------------------- HARNESS EVALUATION REPORT --------------------------
@@ -194,166 +305,119 @@ harness-eval diff \
 |  - Cost increased by +260.4% ($0.0091 -> $0.0328/task).                     |
 |  - Sample size (N=6) is below threshold of 10 tasks for statistical         |
 | certainty.                                                                  |
-|                                                                             |
-| Statistical Reliability: Sample size (N=6, 6 tasks x 1 reps) is too small   |
-| to establish formal statistical significance. Observed differences are      |
-| directional.                                                                |
 +-----------------------------------------------------------------------------+
-
-Report files generated:
-  HTML Report : reports/sample/report.html
-  JSON Report : reports/sample/report.json
-  Summary JSON: reports/sample/summary.json
 ```
 
 ---
 
-## 6. Report Structure & Artifacts
+## 7. Multi-Dimensional Evaluation Methodology
 
-All evaluation outputs are saved to the designated `--output` directory:
+`harness-eval` scores agent performance across six distinct operational dimensions:
 
-```text
-reports/sample/
-├── report.html        # Interactive, self-contained HTML evaluation report
-├── report.json        # Complete, versioned JSON schema dump
-├── summary.json       # Compact executive summary with deltas and trade-offs
-└── runs/              # Granular task-level evidence
-    ├── task-01/
-    │   ├── baseline_run.json    # Exact tokens, timings, and test results
-    │   ├── candidate_run.json
-    │   ├── baseline.patch       # Unified diff generated by baseline
-    │   ├── candidate.patch      # Unified diff generated by candidate
-    │   └── comparison.json      # Structured task-level delta and evidence points
-    ├── task-02/
-    └── ...
-```
+### 1. Correctness Rate (40/60 Split)
+$$\text{Correctness Score} = \begin{cases} (U \times 0.40) + (H \times 0.60) & \text{if } H_{\text{total}} > 0 \\ U & \text{if } H_{\text{total}} = 0 \end{cases}$$
+- $U$: Visible unit test pass rate in `tests/`.
+- $H$: Private holdout test pass rate in `eval_tests/`.
 
----
+### 2. Requirement Satisfaction
+$$\text{Requirement Score} = \frac{\sum_{i=1}^n \text{Score}_i}{\sum_{i=1}^n \text{MaxScore}_i}$$
+Evaluated against explicit acceptance criteria with individual weights defined in `tasks.yaml`.
 
-## 7. Configuration Guide
+### 3. Convention Compliance
+$$\text{Convention Score} = \max\left(0.0, 1.0 - (\text{violations} \times 0.25)\right)$$
+Penalizes missing required type hints or forbidden AST code patterns (e.g., bare `pass`, leftover `TODO`).
 
-### Adding a New Harness
-Create a new directory under `harnesses/<harness_name>/`:
-```yaml
-# harnesses/my_harness/config.yaml
-name: my_harness
-version: "1.0.0"
-model: "claude-3-5-sonnet-20241022"
-temperature: 0.0
-system_prompt: "prompts/system_prompt.txt"
-agents_file: "AGENTS.md"
-skills:
-  - "skills/python-testing.md"
-tools:
-  - "filesystem"
-  - "git"
-hooks:
-  - "hooks/pre_commit_lint.sh"
-cost_per_1k_input: 0.003
-cost_per_1k_output: 0.015
-```
+### 4. Financial Cost & Token Efficiency
+$$\text{Cost} = \left(\frac{\text{Tokens}_{\text{in}}}{1000} \times \text{Price}_{\text{in}}\right) + \left(\frac{\text{Tokens}_{\text{out}}}{1000} \times \text{Price}_{\text{out}}\right)$$
 
-### Adding a New Benchmark Task
-Add an entry to `benchmarks/sample/tasks.yaml`:
-```yaml
-  - id: task-07
-    title: Add rate limiting middleware
-    description: |
-      Implement a TokenBucket rate limiter in app/rate_limit.py.
-      Limit requests to 60 per minute per IP address.
-    target_files:
-      - app/rate_limit.py
-    acceptance_criteria:
-      - id: AC-07-1
-        description: "Rejects requests exceeding 60 req/min with HTTP 429"
-        weight: 1.0
-    evaluation:
-      unit_tests:
-        - "tests/test_rate_limit.py"
-      holdout_tests:
-        - "eval_tests/test_rate_limit_holdout.py"
-      lint_checks:
-        require_type_hints: true
-      timeout_seconds: 30
-```
+### 5. Execution Runtime
+Wall-clock latency recorded in seconds per task run.
 
-### Adding a New Runner
-Subclass `AgentRunner` in `src/harness_eval/runners/base.py`:
-```python
-from harness_eval.runners.base import AgentRunner
-from harness_eval.models import RunResult, BenchmarkTask, HarnessConfig
-from pathlib import Path
-
-class CustomRunner(AgentRunner):
-    def run(self, task: BenchmarkTask, harness: HarnessConfig, project_dir: Path, iteration: int = 1, seed = None) -> RunResult:
-        # Custom execution logic here
-        ...
-```
+### 6. Reliability & Pass Rate
+Binary run status categorization: `SUCCESS`, `FAILED`, `TIMEOUT`, or `ERROR`.
 
 ---
 
-## 8. Real vs. Mock Runner
+## 8. Decision Engine Rules Matrix
 
-- **Mock Runner (`--runner mock`, default)**:
-  - Fully deterministic and seedable (`--seed 42`).
-  - Zero external dependencies or API keys required.
-  - Generates realistic unified diffs, pytest logs, holdout test execution, and token counters.
-  - Enables immediate local execution and CI testing.
-- **Real Runner (`--runner real`)**:
-  - Intended for execution against actual coding agent CLI commands or LLM providers.
-  - Requires `AGENT_RUNNER_CMD`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` in the environment.
-  - Executes task commands in an isolated subprocess, capturing stdout/stderr and real execution times.
+The decision engine evaluates aggregated metrics and task deltas against explicit policy rules defined in [`DecisionPolicy`](file:///d:/Task/chat/src/harness_eval/config.py):
+
+| Rule Identifier | Trigger Condition | Rationale & Outcome |
+| :--- | :--- | :--- |
+| `RULE_CORRECTNESS_DEGRADATION` | `correctness_delta < -0.02` | `NEGATIVE`: Candidate degraded overall correctness by >2pp. |
+| `RULE_REGRESSION_DETECTED` | `regressions > 0` and `correctness_delta <= 0` | `NEGATIVE`: Candidate introduced regressions with no net correctness gain. |
+| `RULE_UNRESOLVED_REGRESSION_RISK` | `regressions > 0` and `correctness_delta > 0` | `INCONCLUSIVE`: Accuracy improved on some tasks, but introduced regressions on others. |
+| `RULE_HIGH_COST_INCREASE` | `cost_increase_pct > 60.0%` | Flags cost trade-off. Forces `INCONCLUSIVE` verdict even if correctness gained. |
+| `RULE_SMALL_SAMPLE_SIZE` | `sample_size < 10` | Flags sample size uncertainty ($N < 10$). Directional only. |
+| `RULE_INCONCLUSIVE_DUE_TO_TRADEOFFS` | `correctness_delta >= 0.08` with cost or small sample flag | `INCONCLUSIVE`: Strong accuracy gain achieved, but resource trade-offs or sample size require human vetting. |
+| `RULE_CLEAR_POSITIVE` | `correctness_delta >= 0.08`, zero regressions, acceptable cost, $N \ge 10$ | `POSITIVE`: Unambiguous, cost-effective improvement across tasks. |
+| `RULE_NEGLIGIBLE_DIFFERENCE` | `|correctness_delta| < 0.08` | `INCONCLUSIVE`: Negligible performance delta between harnesses. |
 
 ---
 
-## 9. Repeated Runs & Variance Analysis
+## 9. Real vs. Mock Runner
 
-LLM coding agents exhibit non-deterministic behavior. To evaluate consistency, use `--repetitions`:
+| Feature | Mock Runner (`--runner mock`, default) | Real Agent Runner (`--runner real`) |
+| :--- | :--- | :--- |
+| **Dependencies** | None (Zero external API keys or network) | Subprocess CLI (`AGENT_RUNNER_CMD`) or LLM API keys |
+| **Determinism** | Fully deterministic via MD5 hashing & `--seed` | Non-deterministic (evaluates live LLM responses) |
+| **Speed** | Instantaneous (<1 second for full suite) | Dependent on LLM generation & tool latency |
+| **Best Used For**| CI/CD testing, test suite validation, local demo | Production harness benchmarking & agent tuning |
+
+---
+
+## 10. Automated Testing
+
+The repository includes a comprehensive 28-test test suite in `tests/`:
 
 ```bash
-harness-eval evaluate --repetitions 3 --output reports/reps_3
-```
-
-When `--repetitions >= 3` and total sample size $N \ge 15$, the statistics engine aggregates results across iterations, computing:
-- Pass rate and failure distributions
-- Runtime and cost mean, median, min, and max
-- Variance consistency across repetitions
-
----
-
-## 10. Design Decisions & Limitations
-
-### Deliberate Design Decisions
-1. **First-Class Inconclusive Verdicts**: Unlike conventional benchmarks that force binary pass/fail, `harness-eval` renders `INCONCLUSIVE` whenever accuracy gains require disproportionate cost inflation ($>60\%$) or whenever regressions are detected.
-2. **Holdout Test Isolation**: Evaluates models against hidden tests they were never instructed to pass, filtering out agents that overfit to visible assertions.
-3. **No Unexplained Composite Number**: Metrics are kept in their native dimensional units (accuracy in percentage points, cost in dollars, runtime in seconds).
-
-### Current Limitations
-1. **Static Analysis Heuristics**: Convention compliance checks check type hints and AST patterns; dynamic runtime security scanning is not currently integrated.
-2. **Subprocess Isolation**: While the real runner limits directory execution, executing arbitrary untrusted agent code in production should be performed within Docker or microVM containers.
-
----
-
-## 11. Automated Test Suite
-
-Run the full pytest test suite:
-
-```bash
+# Run all tests
 pytest -v tests
 ```
 
 Output:
 ```text
-tests/test_benchmark_loader.py::test_load_sample_benchmark PASSED
-tests/test_comparator.py::test_compare_task_outcome_improved PASSED
-tests/test_decision_logic.py::test_decision_inconclusive_due_to_cost_tradeoff PASSED
-tests/test_e2e_cli.py::test_cli_evaluate_and_inspect_command PASSED
-tests/test_reporting.py::test_export_reports PASSED
-...
-============================= 28 passed in 4.79s ==============================
+tests/test_benchmark_loader.py::test_load_sample_benchmark PASSED        [  3%]
+tests/test_benchmark_loader.py::test_load_benchmark_with_filter PASSED   [  7%]
+tests/test_comparator.py::test_compare_task_outcome_improved PASSED      [ 17%]
+tests/test_decision_logic.py::test_decision_positive PASSED              [ 32%]
+tests/test_decision_logic.py::test_decision_inconclusive_due_to_cost_tradeoff PASSED [ 35%]
+tests/test_e2e_cli.py::test_cli_diff_command PASSED                      [ 50%]
+tests/test_evaluation_dimensions.py::test_correctness_with_holdout PASSED [ 60%]
+tests/test_harness_diff.py::test_harness_diff_detection PASSED           [ 78%]
+tests/test_reporting.py::test_export_reports PASSED                      [ 92%]
+tests/test_runners.py::test_mock_runner_deterministic_run PASSED         [ 96%]
+============================= 28 passed in 3.74s ==============================
 ```
-"# Harness_by_taha" 
-#   H a r n e s s _ b y _ t a h a  
- "# Harness_by_taha" 
-#   H a r n e s s _ b y _ t a h a  
+
+For more details on test structure and coverage, see [`tests/README.md`](file:///d:/Task/chat/tests/README.md).
+
+---
+
+## 11. Security & Sandboxing
+
+- **Subprocess Isolation**: When running `--runner real`, commands are executed in a subprocess. For evaluating untrusted LLM outputs, run `harness-eval` inside an isolated Docker container or ephemeral microVM.
+- **Holdout Test Isolation**: Holdout test files (`eval_tests/`) must remain inaccessible to the candidate harness prompt during code generation.
+- **Credential Safety**: Sensitive environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are read strictly from the process environment and are never written to report artifacts or logs.
+
+---
+
+## 12. Documentation Index
+
+- [`docs/Project_Documentation.md`](file:///d:/Task/chat/docs/Project_Documentation.md) — Master Technical Architecture Reference & Specification (24 sections)
+- [`DESIGN.md`](file:///d:/Task/chat/DESIGN.md) — Core design decisions, hardest trade-offs, and cut scope
+- [`AGENTS.md`](file:///d:/Task/chat/AGENTS.md) — Coding agent rules & system invariants
+- [`benchmarks/README.md`](file:///d:/Task/chat/benchmarks/README.md) — Benchmark task specifications & schema guide
+- [`harnesses/README.md`](file:///d:/Task/chat/harnesses/README.md) — Agent harness configurations & diffing guide
+- [`sample_project/README.md`](file:///d:/Task/chat/sample_project/README.md) — Sample application architecture & holdout tests
+- [`src/README.md`](file:///d:/Task/chat/src/README.md) — Source code architecture & extension points
+- [`tests/README.md`](file:///d:/Task/chat/tests/README.md) — Automated test suite & invariants
+- [`reports/README.md`](file:///d:/Task/chat/reports/README.md) — Evaluation reports, HTML/JSON artifacts & inspection
+- [`agent-process/README.md`](file:///d:/Task/chat/agent-process/README.md) — Engineering audit trail & prompt logs
+
+---
+
+## 13. License
+
+Distributed under the MIT License. See `LICENSE` for details.#   H a r n e s s _ b y _ t a h a  
  
