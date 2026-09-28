@@ -8,6 +8,9 @@
 
 `harness-eval` is an evaluation engine designed to answer this question with empirical, auditable evidence. Rather than judging harness changes by reading a few anecdotal outputs or collapsing evaluation into an unexplained single number, `harness-eval` runs a baseline harness and a candidate harness over identical benchmark tasks, collects multidimensional signals, and renders transparent verdicts (`POSITIVE`, `NEGATIVE`, or `INCONCLUSIVE`).
 
+> [!NOTE]
+> **Detailed Technical Documentation**: For the complete architectural specification, multi-dimensional methodology, decision engine rules matrix, and client-facing technical breakdown, see [`docs/Project_Documentation.md`](file:///d:/Task/chat/docs/Project_Documentation.md).
+
 ---
 
 ## 1. Core Concepts
@@ -349,3 +352,4 @@ tests/test_reporting.py::test_export_reports PASSED
 ...
 ============================= 28 passed in 4.79s ==============================
 ```
+"# Harness_by_taha" 
